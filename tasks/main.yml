@@ -1,0 +1,180 @@
+---
+# tasks file for dustcloud
+
+- name: "Check role variable: account"
+  debug: 
+    msg: "account value is: {{ account }}"
+  failed_when: account == '<your user name>'
+- name: "Check role variable: roborock_directory"
+  debug: 
+    msg: "roborock_directory value is: {{ roborock_directory }}"
+  failed_when: roborock_directory|length == 0
+- name: "Check role variable: version.valetudo"
+  debug: 
+    msg: "version.valetudo value is: {{ version.valetudo }}"
+  failed_when: version.valetudo|length == 0
+- name: "Check role variable: version.firmware"
+  debug: 
+    msg: "version.firmware value is: {{ version.firmware }}"
+  failed_when: version.firmware|length == 0
+
+- name: check if rules file exists
+  stat: 
+    path: "/home/{{ account }}/{{ roborock_directory }}/firmware/de.pkg"
+  register: language_de_pkg
+
+- name: Install dustcloud
+  block:
+    - name: Install required packages
+      apt:
+        name: 
+          - ccrypt
+          - git
+          - wget
+          - unzip
+          - dos2unix
+
+    - name: "Remove directory /home/{{ account }}/{{ roborock_directory }}"
+      file:
+        path: "/home/{{ account }}/{{ roborock_directory }}"
+        mode: '0750'
+        owner: "{{ account }}"
+        group: "{{ account }}"
+        state: absent
+
+    - name: "Clone dustcloud git repo"
+      git:
+        repo: 'https://github.com/dgiese/dustcloud.git'
+        dest: "/home/{{ account }}/{{ roborock_directory }}"
+        force: yes
+        clone: yes
+        update: yes
+
+    - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo"
+      file:
+        path: "/home/{{ account }}/{{ roborock_directory }}/valetudo"
+        mode: '0750'
+        owner: "{{ account }}"
+        group: "{{ account }}"
+        state: directory
+
+    - name: Download valetudo
+      get_url:
+        url: "https://github.com/Hypfer/Valetudo/releases/download/{{ version.valetudo }}/valetudo"
+        dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo/"
+
+    - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo/deployment"
+      file:
+        path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment"
+        mode: '0750'
+        owner: "{{ account }}"
+        group: "{{ account }}"
+        state: directory
+
+    - name: Download valetudo.conf
+      get_url:
+        url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/valetudo.conf"
+        dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment"
+
+    - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/etc"
+      file:
+        path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/etc"
+        mode: '0750'
+        owner: "{{ account }}"
+        group: "{{ account }}"
+        state: directory
+
+    - name: Download hosts
+      get_url:
+        url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/etc/hosts"
+        dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo//deployment/etc"
+
+    - name: Download rc.local
+      get_url:
+        url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/etc/rc.local"
+        dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo//deployment/etc"
+
+    - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
+      file:
+        path: "/home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
+        mode: '0750'
+        owner: "{{ account }}"
+        group: "{{ account }}"
+        state: directory
+
+    - name: Download patcher.py
+      get_url:
+        url: "https://raw.githubusercontent.com/JohnRev/rrlogd-patcher/master/patcher.py"
+        dest: "/home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
+
+    - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/firmware"
+      file:
+        path: "/home/{{ account }}/{{ roborock_directory }}/firmware"
+        mode: '0750'
+        owner: "{{ account }}"
+        group: "{{ account }}"
+        state: directory
+
+    - name: Download firmware #https://github.com/dgiese/dustcloud/wiki/Xiaomi-Vacuum-Firmware#tested-firmware
+      get_url:
+        url: "https://cdn.awsbj0.fds.api.mi-img.com/rubys/updpkg/{{ version.firmware }}.fullos.pkg"
+        dest: "/home/{{ account }}/{{ roborock_directory }}/firmware"
+
+    - name: Download language pack #https://github.com/dgiese/dustcloud/wiki/Xiaomi-Vacuum-Firmware#tested-firmware
+      get_url:
+        url: "https://dustbuilder.xvm.mit.edu/pkg/voice/de.pkg"
+        dest: "/home/{{ account }}/{{ roborock_directory }}/firmware"
+
+    - openssh_keypair:
+        path: "/home/{{ account }}/.ssh/id_rsa_dustcloud"
+        owner: "{{ account }}"
+        group: "{{ account }}"
+        mode: '0400'
+        force: no
+        size: 4096
+        state: present
+        type: rsa
+
+    - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/image"
+      file:
+        path: "/home/{{ account }}/{{ roborock_directory }}/image"
+        mode: '0750'
+        owner: "{{ account }}"
+        group: "{{ account }}"
+        state: directory
+
+    - name: Patch the firmware and create the image
+      shell: 
+        cmd: "../devices/xiaomi.vacuum/firmwarebuilder/imagebuilder.sh --firmware=../firmware/{{ version.firmware }}.fullos.pkg --soundfile=../firmware/de.pkg --public-key=/home/{{ account }}/.ssh/id_rsa_dustcloud.pub --valetudo-path=../valetudo --disable-firmware-updates --ntpserver=fritz.box --rrlogd-patcher=../rrlogd-patcher/patcher.py --replace-adbd"
+        chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
+      become: true
+      become_user: 'root'
+
+  when: language_de_pkg.stat.exists == false
+
+- name: Flash firmware to roborock device
+  block:
+    - name: Install packages
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-venv
+          - python3-dev
+          - libffi-dev
+          - libssl-dev
+      become: true
+      become_user: 'root'
+
+    - name: Create a python environment, install python3 packages
+      shell: |
+        python3 -m venv .venv
+        pip3 install wheel
+        pip3 install python-miio
+
+    - name: Reset the wlan of the roborock device
+      pause:
+        echo: yes
+        prompt: At the roborock device, press and hold both buttons (left and right) beside the power button. Then press any key to go on.
+
+    

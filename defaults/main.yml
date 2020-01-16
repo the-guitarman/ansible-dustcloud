@@ -1,0 +1,8 @@
+---
+# defaults file for dustcloud
+
+account: '<your user name>'
+roborock_directory: 'roborock'
+version:
+  valetudo: '0.4.0'
+  firmware: 'v11_001856'
