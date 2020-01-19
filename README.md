@@ -34,7 +34,21 @@ version:
 Dependencies
 ------------
 
-None.
+At your ansible host you need to install python, pip and the python library netaddr, e.g.:
+
+Debian/Ubuntu:
+
+```bash
+sudo apt install python python-pip
+pip install netaddr
+```
+
+MAC:
+
+```bash
+brew install python
+pip install netaddr
+```
 
 Example Playbook
 ----------------
@@ -62,7 +76,8 @@ License
 This project has a dual license.
 
 This package is licensed under
-the **LGPL 3.0**. Do whatever you want with it, but please give improvements and bugfixes back so everyone can benefit.
+the **LGPL 3.0**. Do whatever you want with it, 
+but please give improvements and bugfixes back so everyone can benefit.
 
 For commercial usage please contact me at first.
 
