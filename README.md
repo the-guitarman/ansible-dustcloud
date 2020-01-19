@@ -3,6 +3,7 @@ ansible-dustcloud
 
 **Attention:** This is an after work project and n
 either it's finished nor it's ready for production usage.
+It's under development. 
 
 Installs the software to root your roborock vacuum cleaner, to disconnect 
 it from the xiaomi cloud and to use it with your own private dustcloud. 
