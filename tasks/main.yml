@@ -12,17 +12,15 @@
     prompt: "What is the ip address of your roborock? (e.g.: 192.168.0.5)"
   register: roborock_ip_address
 
-- name: "Test reachability to {{ roborock_ip_address.user_input }} using default vrf"
-  net_ping:
-    count: 2
-    dest: roborock_ip_address.user_input
-    state: present
+- name: "Test reachability to {{ roborock_ip_address.user_input }}"
+  shell: "ping -c 4 {{ roborock_ip_address.user_input }}"
   register: roborock_ip_address_ping_test
   when: roborock_ip_address.user_input | ipaddr | length >= 7 and
         roborock_ip_address.user_input | ipaddr | length <= 15
+  ignore_errors: yes
 - name: "Ping test"
   debug:
-    msg: "{{ roborock_ip_address_ping_test.packet_loss }}"
+    msg: "{{ roborock_ip_address_ping_test.rc }}"
 
 - name: Check role variables
   block:
@@ -216,15 +214,15 @@
   when: "has_network_connection.user_input == 'yes' and 
         roborock_ip_address.user_input | ipaddr | length >= 7 and
         roborock_ip_address.user_input | ipaddr | length <= 15 and
-        roborock_ip_address_ping_test.packet_loss == 0 and
+        roborock_ip_address_ping_test.rc == 0 and
         firmware_pkg_stat.stat.exists == false and
         language_de_pkg_stat.stat.exists == false"
+
 
 - name: Check created roborock firmware file exists
   stat: 
     path: "/home/{{ account }}/{{ roborock_directory }}/image/output/{{ version.firmware }}.fullos.pkg"
   register: created_firmware
-
 
 - name: Flash firmware to roborock device
   block:
@@ -241,6 +239,6 @@
         chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
       when: flash_roborock_now.user_input == 'yes'
 
-  when: created_firmware.stat.exists == true
-
+  when: "roborock_ip_address_ping_test.rc == 0 and 
+        created_firmware.stat.exists == true"
 
