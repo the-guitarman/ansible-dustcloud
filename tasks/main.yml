@@ -5,240 +5,241 @@
   pause:
     prompt: "Is there a possible network connection from your target host ({{ ansible_hostname }}) to the roborock vacuum cleaner ? (yes or no)"
   register: has_network_connection
-#- assert: { that: "'{{ has_network_connection.user_input }}' == 'yes'" }
 
-- name: Type in the roborock ip address
-  pause:
-    prompt: "What is the ip address of your roborock? (e.g.: 192.168.0.5)"
-  register: roborock_ip_address
-
-- name: "Test reachability to {{ roborock_ip_address.user_input }}"
-  shell: "ping -c 4 {{ roborock_ip_address.user_input }}"
-  register: roborock_ip_address_ping_test
-  when: roborock_ip_address.user_input | ipaddr | length >= 7 and
-        roborock_ip_address.user_input | ipaddr | length <= 15
-  ignore_errors: yes
-- name: "Ping test"
-  debug:
-    msg: "{{ roborock_ip_address_ping_test.rc }}"
-
-- name: Check role variables
-  block:
-    - name: "Variable: account"
-      debug: 
-        msg: "account value is: {{ account }}"
-      failed_when: account == '<your user name>'
-    - name: "Variable: roborock_directory"
-      debug: 
-        msg: "roborock_directory value is: {{ roborock_directory }}"
-      failed_when: roborock_directory|length == 0
-    - name: "Variable: version.valetudo"
-      debug: 
-        msg: "version.valetudo value is: {{ version.valetudo }}"
-      failed_when: version.valetudo|length == 0
-    - name: "Variable: version.firmware"
-      debug: 
-        msg: "version.firmware value is: {{ version.firmware }}"
-      failed_when: version.firmware|length == 0
-
-- name: Register file stats
-  block:
-    - name: Check valetudo file exists
-      stat:
-        path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/valetudo"
-      register: valetudo_stat
-    - name: Check valetudo config file exists
-      stat:
-        path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/valetudo.conf"
-      register: valetudo_config_stat
-    - name: Check roborock firmware file exists
-      stat: 
-        path: "/home/{{ account }}/{{ roborock_directory }}/firmware"
-      register: firmware_pkg_stat
-    - name: Check roborock language pack file exists
-      stat: 
-        path: "/home/{{ account }}/{{ roborock_directory }}/firmware/de.pkg"
-      register: language_de_pkg_stat
-
-- name: Install dustcloud
-  block:
-
-    - name: Install required packages
-      apt:
-        name:
-          - ccrypt
-          - git
-          - wget
-          - unzip
-          - dos2unix
-          - python3
-          - python3-pip
-          - python3-venv
-          - python3-dev
-          - libffi-dev
-          - libssl-dev
-      become: true
-      become_user: 'root'
-
-    - name: Create a python environment, install python3 packages
-      shell: |
-        python3 -m venv .venv
-        pip3 install wheel
-        pip3 install python-miio
-
-    - name: "Remove directory /home/{{ account }}/{{ roborock_directory }}"
-      file:
-        path: "/home/{{ account }}/{{ roborock_directory }}"
-        mode: '0750'
-        owner: "{{ account }}"
-        group: "{{ account }}"
-        state: absent
-
-    - name: "Clone dustcloud git repo"
-      git:
-        repo: 'https://github.com/dgiese/dustcloud.git'
-        dest: "/home/{{ account }}/{{ roborock_directory }}"
-        force: yes
-        clone: yes
-        update: yes
-
-    - name: Download valetudo
-      block:
-        - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo"
-          file:
-            path: "/home/{{ account }}/{{ roborock_directory }}/valetudo"
-            mode: '0750'
-            owner: "{{ account }}"
-            group: "{{ account }}"
-            state: directory
-        - name: Download valetudo
-          get_url:
-            url: "https://github.com/Hypfer/Valetudo/releases/download/{{ version.valetudo }}/valetudo"
-            dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo/"
-      when: valetudo_stat.stat.exists == false
-
-    - name: Download valetudo Config
-      block:
-        - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo/deployment"
-          file:
-            path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment"
-            mode: '0750'
-            owner: "{{ account }}"
-            group: "{{ account }}"
-            state: directory
-        - name: Download valetudo.conf
-          get_url:
-            url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/valetudo.conf"
-            dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/"
-      when: valetudo_config_stat.stat.exists == false
-
-    - name: Download more valetudo files
-      block:
-        - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/etc"
-          file:
-            path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/etc"
-            mode: '0750'
-            owner: "{{ account }}"
-            group: "{{ account }}"
-            state: directory
-        - name: Download hosts
-          get_url:
-            url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/etc/hosts"
-            dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo//deployment/etc/"
-        - name: Download rc.local
-          get_url:
-            url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/etc/rc.local"
-            dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo//deployment/etc/"
-
-    - name: Download rrlogd-patcher
-      block:
-        - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
-          file:
-            path: "/home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
-            mode: '0750'
-            owner: "{{ account }}"
-            group: "{{ account }}"
-            state: directory
-        - name: Download patcher.py
-          get_url:
-            url: "https://raw.githubusercontent.com/JohnRev/rrlogd-patcher/master/patcher.py"
-            dest: "/home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
-
-    - name: Download new firmware
-      block:
-        - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/firmware"
-          file:
-            path: "/home/{{ account }}/{{ roborock_directory }}/firmware"
-            mode: '0750'
-            owner: "{{ account }}"
-            group: "{{ account }}"
-            state: directory
-        - name: Download firmware #https://github.com/dgiese/dustcloud/wiki/Xiaomi-Vacuum-Firmware#tested-firmware
-          get_url:
-            url: "https://cdn.awsbj0.fds.api.mi-img.com/rubys/updpkg/{{ version.firmware }}.fullos.pkg"
-            dest: "/home/{{ account }}/{{ roborock_directory }}/firmware"
-          when: firmware_pkg_stat.stat.exists == false
-        - name: Download language pack #https://github.com/dgiese/dustcloud/wiki/Xiaomi-Vacuum-Firmware#tested-firmware
-          get_url:
-            url: "https://dustbuilder.xvm.mit.edu/pkg/voice/de.pkg"
-            dest: "/home/{{ account }}/{{ roborock_directory }}/firmware"
-          when: language_de_pkg_stat.stat.exists == false
-      when: firmware_pkg_stat.stat.exists == false or
-            language_de_pkg_stat.stat.exists == false
-
-    - openssh_keypair:
-        path: "/home/{{ account }}/.ssh/id_rsa_dustcloud"
-        owner: "{{ account }}"
-        group: "{{ account }}"
-        mode: '0400'
-        force: no
-        size: 4096
-        state: present
-        type: rsa
-
-    - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/image"
-      file:
-        path: "/home/{{ account }}/{{ roborock_directory }}/image"
-        mode: '0750'
-        owner: "{{ account }}"
-        group: "{{ account }}"
-        state: directory
-
-    - name: Patch the firmware and create the image
-      shell: 
-        cmd: "../devices/xiaomi.vacuum/firmwarebuilder/imagebuilder.sh --firmware=../firmware/{{ version.firmware }}.fullos.pkg --soundfile=../firmware/de.pkg --public-key=/home/{{ account }}/.ssh/id_rsa_dustcloud.pub --valetudo-path=../valetudo --disable-firmware-updates --ntpserver=fritz.box --rrlogd-patcher=../rrlogd-patcher/patcher.py --replace-adbd"
-        chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
-      become: true
-      become_user: 'root'
-
-  when: "has_network_connection.user_input == 'yes' and 
-        roborock_ip_address.user_input | ipaddr | length >= 7 and
-        roborock_ip_address.user_input | ipaddr | length <= 15 and
-        roborock_ip_address_ping_test.rc == 0 and
-        firmware_pkg_stat.stat.exists == false and
-        language_de_pkg_stat.stat.exists == false"
-
-
-- name: Check created roborock firmware file exists
-  stat: 
-    path: "/home/{{ account }}/{{ roborock_directory }}/image/output/{{ version.firmware }}.fullos.pkg"
-  register: created_firmware
-
-- name: Flash firmware to roborock device
-  block:
-
-    - name: Flashing roborock vacuum cleaner
+- name: "Skip all next tasks"
+  when: "has_network_connection.user_input == 'yes'"
+  block: 
+    - name: Type in the roborock ip address
       pause:
-        echo: yes
-        prompt: "In the next step the dustcloud firmware will be flashed to your roborock vacuum cleaner. This takes 5-10 minutes. Do not switch off the device during this time! Do it now? (yes or no)"
-      register: flash_roborock_now      
+        prompt: "What is the ip address of your roborock? (e.g.: 192.168.0.5)"
+      register: roborock_ip_address
+      when: "has_network_connection.user_input == 'yes'"
 
-    - name: "Flash the roborock vacuum cleaner at {{ roborock_ip_address.user_input }}"
-      shell: 
-        cmd: "python3 /home/{{ account }}/{{ roborock_directory }}/devices/xiaomi.vacuum/firmwarebuilder/flasher.py -a {{ roborock_ip_address.user_input }} -f output/{{ version.firmware }}.fullos.pkg"
-        chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
-      when: flash_roborock_now.user_input == 'yes'
+    - name: "Test reachability of {{ roborock_ip_address.user_input }}"
+      shell: "ping -c 4 {{ roborock_ip_address.user_input }}"
+      register: roborock_ip_address_ping_test
+      when: roborock_ip_address.user_input | ipaddr | length >= 7 and
+            roborock_ip_address.user_input | ipaddr | length <= 15
+      failed_when: "roborock_ip_address_ping_test.rc > 1"
 
-  when: "roborock_ip_address_ping_test.rc == 0 and 
-        created_firmware.stat.exists == true"
+    - name: "Reachability test result"
+      debug: 
+        msg: "Reachability test of {{ roborock_ip_address.user_input }} failed. All next role tasks will be skipped."
+      when: roborock_ip_address_ping_test.rc > 0
 
+    - name: Check role variables
+      when: roborock_ip_address_ping_test.rc == 0
+      block:
+        - name: "Variable: account"
+          debug: 
+            msg: "account value is: {{ account }}"
+          failed_when: account == '<your user name>'
+        - name: "Variable: roborock_directory"
+          debug: 
+            msg: "roborock_directory value is: {{ roborock_directory }}"
+          failed_when: roborock_directory|length == 0
+        - name: "Variable: version.valetudo"
+          debug: 
+            msg: "version.valetudo value is: {{ version.valetudo }}"
+          failed_when: version.valetudo|length == 0
+        - name: "Variable: version.firmware"
+          debug: 
+            msg: "version.firmware value is: {{ version.firmware }}"
+          failed_when: version.firmware|length == 0
+
+    - name: Register file stats
+      when: "roborock_ip_address_ping_test.rc == 0"
+      block:
+        - name: Check valetudo file exists
+          stat:
+            path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/valetudo"
+          register: valetudo_stat
+        - name: Check valetudo config file exists
+          stat:
+            path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/valetudo.conf"
+          register: valetudo_config_stat
+        - name: Check roborock firmware file exists
+          stat: 
+            path: "/home/{{ account }}/{{ roborock_directory }}/firmware"
+          register: firmware_pkg_stat
+        - name: Check roborock language pack file exists
+          stat: 
+            path: "/home/{{ account }}/{{ roborock_directory }}/firmware/de.pkg"
+          register: language_de_pkg_stat
+
+    - name: Install dustcloud
+      when: "roborock_ip_address.user_input | ipaddr | length >= 7 and
+            roborock_ip_address.user_input | ipaddr | length <= 15 and
+            roborock_ip_address_ping_test.rc == 0 and
+            firmware_pkg_stat.stat.exists == false and
+            language_de_pkg_stat.stat.exists == false"
+      block:
+        - name: Install required packages
+          apt:
+            name:
+              - ccrypt
+              - git
+              - wget
+              - unzip
+              - dos2unix
+              - python3
+              - python3-pip
+              - python3-venv
+              - python3-dev
+              - libffi-dev
+              - libssl-dev
+          become: true
+          become_user: 'root'
+
+        - name: Create a python environment, install python3 packages
+          shell: |
+            python3 -m venv .venv
+            pip3 install wheel
+            pip3 install python-miio
+
+        - name: "Remove directory /home/{{ account }}/{{ roborock_directory }}"
+          file:
+            path: "/home/{{ account }}/{{ roborock_directory }}"
+            mode: '0750'
+            owner: "{{ account }}"
+            group: "{{ account }}"
+            state: absent
+
+        - name: "Clone dustcloud git repo"
+          git:
+            repo: 'https://github.com/dgiese/dustcloud.git'
+            dest: "/home/{{ account }}/{{ roborock_directory }}"
+            force: yes
+            clone: yes
+            update: yes
+
+        - name: Download valetudo
+          when: valetudo_stat.stat.exists == false
+          block:
+            - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo"
+              file:
+                path: "/home/{{ account }}/{{ roborock_directory }}/valetudo"
+                mode: '0750'
+                owner: "{{ account }}"
+                group: "{{ account }}"
+                state: directory
+            - name: Download valetudo
+              get_url:
+                url: "https://github.com/Hypfer/Valetudo/releases/download/{{ version.valetudo }}/valetudo"
+                dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo/"
+
+        - name: Download valetudo Config
+          when: valetudo_config_stat.stat.exists == false
+          block:
+            - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo/deployment"
+              file:
+                path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment"
+                mode: '0750'
+                owner: "{{ account }}"
+                group: "{{ account }}"
+                state: directory
+            - name: Download valetudo.conf
+              get_url:
+                url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/valetudo.conf"
+                dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/"
+
+        - name: Download more valetudo files
+          block:
+            - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/etc"
+              file:
+                path: "/home/{{ account }}/{{ roborock_directory }}/valetudo/deployment/etc"
+                mode: '0750'
+                owner: "{{ account }}"
+                group: "{{ account }}"
+                state: directory
+            - name: Download hosts
+              get_url:
+                url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/etc/hosts"
+                dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo//deployment/etc/"
+            - name: Download rc.local
+              get_url:
+                url: "https://github.com/Hypfer/Valetudo/raw/master/deployment/etc/rc.local"
+                dest: "/home/{{ account }}/{{ roborock_directory }}/valetudo//deployment/etc/"
+
+        - name: Download rrlogd-patcher
+          block:
+            - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
+              file:
+                path: "/home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
+                mode: '0750'
+                owner: "{{ account }}"
+                group: "{{ account }}"
+                state: directory
+            - name: Download patcher.py
+              get_url:
+                url: "https://raw.githubusercontent.com/JohnRev/rrlogd-patcher/master/patcher.py"
+                dest: "/home/{{ account }}/{{ roborock_directory }}/rrlogd-patcher"
+
+        - name: Download new firmware
+          when: firmware_pkg_stat.stat.exists == false or
+                language_de_pkg_stat.stat.exists == false
+          block:
+            - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/firmware"
+              file:
+                path: "/home/{{ account }}/{{ roborock_directory }}/firmware"
+                mode: '0750'
+                owner: "{{ account }}"
+                group: "{{ account }}"
+                state: directory
+            - name: Download firmware #https://github.com/dgiese/dustcloud/wiki/Xiaomi-Vacuum-Firmware#tested-firmware
+              get_url:
+                url: "https://cdn.awsbj0.fds.api.mi-img.com/rubys/updpkg/{{ version.firmware }}.fullos.pkg"
+                dest: "/home/{{ account }}/{{ roborock_directory }}/firmware"
+              when: firmware_pkg_stat.stat.exists == false
+            - name: Download language pack #https://github.com/dgiese/dustcloud/wiki/Xiaomi-Vacuum-Firmware#tested-firmware
+              get_url:
+                url: "https://dustbuilder.xvm.mit.edu/pkg/voice/de.pkg"
+                dest: "/home/{{ account }}/{{ roborock_directory }}/firmware"
+              when: language_de_pkg_stat.stat.exists == false
+
+        - openssh_keypair:
+            path: "/home/{{ account }}/.ssh/id_rsa_dustcloud"
+            owner: "{{ account }}"
+            group: "{{ account }}"
+            mode: '0400'
+            force: no
+            size: 4096
+            state: present
+            type: rsa
+
+        - name: "Create directory /home/{{ account }}/{{ roborock_directory }}/image"
+          file:
+            path: "/home/{{ account }}/{{ roborock_directory }}/image"
+            mode: '0750'
+            owner: "{{ account }}"
+            group: "{{ account }}"
+            state: directory
+
+        - name: Patch the firmware and create the image
+          shell: 
+            cmd: "../devices/xiaomi.vacuum/firmwarebuilder/imagebuilder.sh --firmware=../firmware/{{ version.firmware }}.fullos.pkg --soundfile=../firmware/de.pkg --public-key=/home/{{ account }}/.ssh/id_rsa_dustcloud.pub --valetudo-path=../valetudo --disable-firmware-updates --ntpserver=fritz.box --rrlogd-patcher=../rrlogd-patcher/patcher.py --replace-adbd"
+            chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
+          become: true
+          become_user: 'root'
+
+
+    - name: Check created roborock firmware file exists
+      stat: 
+        path: "/home/{{ account }}/{{ roborock_directory }}/image/output/{{ version.firmware }}.fullos.pkg"
+      register: created_firmware
+
+    - name: Flash firmware to roborock device
+      when: "roborock_ip_address_ping_test.rc == 0 and 
+            created_firmware.stat.exists == true"
+      block:
+        - name: Flashing roborock vacuum cleaner
+          pause:
+            echo: yes
+            prompt: "In the next step the dustcloud firmware will be flashed to your roborock vacuum cleaner. This takes 5-10 minutes. Do not switch off the device during this time! Do it now? (yes or no)"
+          register: flash_roborock_now      
+
+        - name: "Flash the roborock vacuum cleaner at {{ roborock_ip_address.user_input }}"
+          shell: 
+            cmd: "python3 /home/{{ account }}/{{ roborock_directory }}/devices/xiaomi.vacuum/firmwarebuilder/flasher.py -a {{ roborock_ip_address.user_input }} -f output/{{ version.firmware }}.fullos.pkg"
+            chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
+          when: flash_roborock_now.user_input == 'yes'
