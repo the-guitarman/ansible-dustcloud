@@ -1,2 +1,8 @@
 ---
 # handlers file for dustcloud
+- name: kill-wpa-supplicant
+  include_tasks: tasks/kill_wpa_supplicant.yml
+- name: start-roborock-wpa-supplicant
+  shell: "wpa_supplicant -B -i{{ wifi_network_device }} -Dnl80211,wext -c /etc/wpa_supplicant/wpa_supplicant-{{ wifi_network_device }}.conf"
+- name: start-default-wpa-supplicant
+  shell: "wpa_supplicant -B -i{{ wifi_network_device }} -Dnl80211,wext -c /etc/wpa_supplicant/wpa_supplicant.conf"

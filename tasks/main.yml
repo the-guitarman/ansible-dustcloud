@@ -1,34 +1,17 @@
 ---
 # tasks file for dustcloud
 
-- name: Connection to your roborock ip vacuum cleaner
+- name: Network connections
   pause:
-    prompt: "Is there a possible network connection from your target host ({{ ansible_hostname }}) to the roborock vacuum cleaner ? (yes or no)"
+    prompt: "Do you have a LAN connection to the remote host ({{ ansible_hostname }}) and does the remote host have a wifi device? (type yes or no)"
+    echo: yes
   register: has_network_connection
 
-- name: "Skip all next tasks"
+- name: "Network connection"
   when: "has_network_connection.user_input == 'yes'"
   block: 
-    - name: Type in the roborock ip address
-      pause:
-        prompt: "What is the ip address of your roborock? (e.g.: 192.168.0.5)"
-      register: roborock_ip_address
-      when: "has_network_connection.user_input == 'yes'"
-
-    - name: "Test reachability of {{ roborock_ip_address.user_input }}"
-      shell: "ping -c 4 {{ roborock_ip_address.user_input }}"
-      register: roborock_ip_address_ping_test
-      when: roborock_ip_address.user_input | ipaddr | length >= 7 and
-            roborock_ip_address.user_input | ipaddr | length <= 15
-      failed_when: "roborock_ip_address_ping_test.rc > 1"
-
-    - name: "Reachability test result"
-      debug: 
-        msg: "Reachability test of {{ roborock_ip_address.user_input }} failed. All next role tasks will be skipped."
-      when: roborock_ip_address_ping_test.rc > 0
 
     - name: Check role variables
-      when: roborock_ip_address_ping_test.rc == 0
       block:
         - name: "Variable: account"
           debug: 
@@ -48,7 +31,6 @@
           failed_when: version.firmware|length == 0
 
     - name: Register file stats
-      when: "roborock_ip_address_ping_test.rc == 0"
       block:
         - name: Check valetudo file exists
           stat:
@@ -68,15 +50,13 @@
           register: language_de_pkg_stat
 
     - name: Install dustcloud
-      when: "roborock_ip_address.user_input | ipaddr | length >= 7 and
-            roborock_ip_address.user_input | ipaddr | length <= 15 and
-            roborock_ip_address_ping_test.rc == 0 and
-            firmware_pkg_stat.stat.exists == false and
+      when: "firmware_pkg_stat.stat.exists == false and
             language_de_pkg_stat.stat.exists == false"
       block:
         - name: Install required packages
           apt:
             name:
+              - wpasupplicant
               - ccrypt
               - git
               - wget
@@ -223,23 +203,132 @@
           become_user: 'root'
 
 
-    - name: Check created roborock firmware file exists
-      stat: 
-        path: "/home/{{ account }}/{{ roborock_directory }}/image/output/{{ version.firmware }}.fullos.pkg"
-      register: created_firmware
-
-    - name: Flash firmware to roborock device
-      when: "roborock_ip_address_ping_test.rc == 0 and 
-            created_firmware.stat.exists == true"
+    - name: "Reconfigure remote host {{ ansible_host }} wifi"
       block:
-        - name: Flashing roborock vacuum cleaner
-          pause:
-            echo: yes
-            prompt: "In the next step the dustcloud firmware will be flashed to your roborock vacuum cleaner. This takes 5-10 minutes. Do not switch off the device during this time! Do it now? (yes or no)"
-          register: flash_roborock_now      
 
-        - name: "Flash the roborock vacuum cleaner at {{ roborock_ip_address.user_input }}"
-          shell: 
-            cmd: "python3 /home/{{ account }}/{{ roborock_directory }}/devices/xiaomi.vacuum/firmwarebuilder/flasher.py -a {{ roborock_ip_address.user_input }} -f output/{{ version.firmware }}.fullos.pkg"
-            chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
-          when: flash_roborock_now.user_input == 'yes'
+        - name: Reset the wifi of roborock vacuum cleaner
+          pause:
+            prompt: "Press and hold both buttons of the roborock vacuum cleaner beside the power button for some seconds till the device confirms with: 'The wifi will be reseted.'. As an alternative press the reset pin under the lid. Did you have reset the device? (type yes or no)"
+            echo: yes
+          register: is_wifi_reset
+
+        - name: Connect to roborock vacuum cleaner
+          when: "is_wifi_reset.user_input == 'yes'"
+          become: true
+          become_user: root
+          block:
+
+            - name: "Find wifi device"
+              shell: 'ls /sys/class/ieee80211/*/device/net/'
+              register: wifi_network_device_found
+            - name: "Set wifi device, if available"
+              set_fact:
+                wifi_network_device: "{{ wifi_network_device_found.stdout }}"
+              when: wifi_network_device_found.stdout | length > 0
+
+            - name: Scan for roborock wifi ssid
+              shell: 'iwlist {{ wifi_network_device }} scan | grep ESSID | grep "roborock-vacuum" | cut -d "\"" -f 2'
+              register: roborock_wifi_ssid_found
+            - name: "Set roborock wifi ssid, if found"
+              set_fact:
+                roborock_wifi_ssid: "{{ roborock_wifi_ssid_found.stdout }}"
+              when: roborock_wifi_ssid_found.stdout | length > 0
+
+            - name: Type in roborock wifi ssid
+              pause:
+                prompt: "What is the roborock wifi ssid? (Default: {{ roborock_wifi_ssid }})"
+                echo: yes
+              register: roborock_wifi_ssid_2
+            - name: Check roborock wifi ssid or set a default
+              set_fact:
+                roborock_wifi_ssid: roborock_wifi_ssid_2.user_input
+              when: roborock_wifi_ssid_2.user_input != ""
+            - name: "Roborock wifi ssid set to"
+              debug: 
+                msg: "{{ roborock_wifi_ssid }}"
+              when: roborock_wifi_ssid_2.user_input == ""
+
+            # https://github.com/WanderlandTravelers/ansible-wpa_supplicant-role/blob/master/templates/etc/wpa_supplicant/wpa_supplicant.conf.j2
+            - name: "Install roborock wpa_supplicant-{{ wifi_network_device }}.conf" 
+              template: 
+                src: "templates/wpa_supplicant.conf.j2"
+                dest: "/etc/wpa_supplicant/wpa_supplicant-{{ wifi_network_device }}.conf"
+                owner: 'root'
+                group: 'root'
+                mode: '0644'
+                #block_start_string: "{%"
+                #block_end_string: "%}"
+                #variable_start_string: "{{"
+                #variable_end_string: "}}"
+            - name: kill-wpa-supplicant
+              include_tasks: tasks/kill_wpa_supplicant.yml
+            - name: start-roborock-wpa-supplicant
+              shell: "wpa_supplicant -B -i{{ wifi_network_device }} -Dnl80211,wext -c /etc/wpa_supplicant/wpa_supplicant-{{ wifi_network_device }}.conf"
+
+            - name: "Test 1 reachability of {{ roborock_wifi_ip_address }}"
+              wait_for:
+                delay: 10
+                host: "{{ roborock_wifi_ip_address }}"
+                port: 53
+                state: started
+                timeout: 300
+            - name: "Test 2 reachability of {{ roborock_wifi_ip_address }}"
+              shell: "ping -c 4 {{ roborock_wifi_ip_address }}"
+              register: roborock_wifi_ip_address_ping_test
+              when: roborock_wifi_ip_address | ipaddr | length >= 7 and
+                    roborock_wifi_ip_address | ipaddr | length <= 15
+              failed_when: "roborock_wifi_ip_address_ping_test.rc > 1"
+            - name: "Reachability test result"
+              debug: 
+                msg: "Reachability test of {{ roborock_wifi_ip_address }} failed. Can not flash the new firmware to the roborock device. All next role tasks will be skipped."
+              when: roborock_wifi_ip_address_ping_test.rc > 0
+
+
+
+            - name: Flash new firmware to roborock device
+              when: "roborock_wifi_ip_address_ping_test.rc == 0"
+              block:
+                - name: Check new firmware file exists
+                  stat: 
+                    path: "/home/{{ account }}/{{ roborock_directory }}/image/output/{{ version.firmware }}.fullos.pkg"
+                  register: created_firmware
+
+                - name: Flash new firmware to roborock device
+                  when: "created_firmware.stat.exists == true"
+                  block:
+                    - name: Flashing roborock vacuum cleaner
+                      pause:
+                        prompt: "In the next step the dustcloud firmware will be flashed to your roborock vacuum cleaner. This takes 5-10 minutes. Do not switch off the device during this time! Do it now? (yes or no)"
+                        echo: yes
+                      register: flash_roborock_now      
+
+                    - name: "Flash the roborock vacuum cleaner"
+                      shell: 
+                        cmd: "python3 /home/{{ account }}/{{ roborock_directory }}/devices/xiaomi.vacuum/firmwarebuilder/flasher.py -f output/{{ version.firmware }}.fullos.pkg"
+                        chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
+                      when: flash_roborock_now.user_input == 'yes'
+                    - name: kill-wpa-supplicant
+                      include_tasks: tasks/kill_wpa_supplicant.yml
+                    - name: start-default-wpa-supplicant
+                      shell: "wpa_supplicant -B -i{{ wifi_network_device }} -Dnl80211,wext -c /etc/wpa_supplicant/wpa_supplicant.conf"
+                    - name: "Remove file /etc/wpa_supplicant/wpa_supplicant-{{ wifi_network_device }}.conf"
+                      file:
+                        path: "/etc/wpa_supplicant/wpa_supplicant-{{ wifi_network_device }}.conf"
+                        state: absent
+
+                    - name: "It should be done."
+                      when: "flash_roborock_now.user_input == 'yes'"
+                      block: 
+                        - name: "Connect to the roborock wifi"
+                          pause:
+                            prompt: "Connect your commputer to the roborock wifi ({{ roborock_wifi_ssid }}) and open this address in your browser: http://{{ roborock_wifi_ip_address }}"
+                            echo: yes
+                        - name: "Configure roborock wifi"
+                          pause:
+                            prompt: "At the website klick to Settings -> WIFI -> WIFI Settings and change the roborock wifi settings to connect it with your private wifi. After save, the roborock should reboot."
+                            echo: yes 
+                        - name: "Connect to your private wifi"
+                          pause:
+                            prompt: "Connect your computer to your private wifi and open this address in your browser, to see it works: http://rockrobo/"
+                            echo: yes
+
