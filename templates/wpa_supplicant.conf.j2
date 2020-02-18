@@ -1,0 +1,10 @@
+ctrl_interface={{ wpa_ctrl_interface }}
+update_config={{ wpa_update_config }}
+{% if wpa_country is defined %}
+country={{ wpa_country }}
+{% endif %}
+
+network={
+   ssid="{{ roborock_wifi_ssid }}"
+   key_mgmt=NONE
+}
