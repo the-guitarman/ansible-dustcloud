@@ -9,8 +9,6 @@ version:
 
 wifi_network_device: wlan0
 wpa_ctrl_interface: 'DIR=/var/run/wpa_supplicant GROUP=netdev'
-#wpa_ctrl_interface: 'DIR=/var/run/wpa_supplicant GROUP=root'
-#wpa_ctrl_interface: 'DIR=/var/run/wpa_supplicant'
 wpa_update_config: 1
 wpa_country: 'DE'
 roborock_wifi_ssid: 'roborock-vacuum-s5_miap9806'

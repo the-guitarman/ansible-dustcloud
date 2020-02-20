@@ -1,14 +1,22 @@
 ---
 # tasks file for dustcloud
 
+- name: Charging station
+  pause:
+    prompt: "In order for the firmware to be updated, the device must be at the charging station. Did you put the device to charging station for updating firmware? (type yes or no)"
+    echo: yes
+  register: is_at_charging_station
+
 - name: Network connections
+  when: is_at_charging_station.user_input == 'yes'
   pause:
     prompt: "Do you have a LAN connection to the remote host ({{ ansible_hostname }}) and does the remote host have a wifi device? (type yes or no)"
     echo: yes
   register: has_network_connection
 
 - name: "Network connection"
-  when: "has_network_connection.user_input == 'yes'"
+  when: is_at_charging_station.user_input == 'yes' and 
+        has_network_connection.user_input == 'yes'
   block: 
 
     - name: Check role variables
@@ -304,9 +312,13 @@
 
                     - name: "Flash the roborock vacuum cleaner"
                       shell: 
-                        cmd: "python3 /home/{{ account }}/{{ roborock_directory }}/devices/xiaomi.vacuum/firmwarebuilder/flasher.py -f output/{{ version.firmware }}.fullos.pkg"
+                        cmd: "python3 /home/{{ account }}/{{ roborock_directory }}/devices/xiaomi.vacuum/firmwarebuilder/flasher.py -f output/{{ version.firmware }}.fullos.pkg -a {{ roborock_wifi_ip_address }}"
                         chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
                       when: flash_roborock_now.user_input == 'yes'
+                      register: flash_result
+                    - name: Replace newlines in flash result
+                      set_fact:
+                        flash_result: "{{ flash_result.stdout | replace('\n', '') | lower }}"
                     - name: kill-wpa-supplicant
                       include_tasks: tasks/kill_wpa_supplicant.yml
                     - name: start-default-wpa-supplicant
@@ -317,11 +329,12 @@
                         state: absent
 
                     - name: "It should be done."
-                      when: "flash_roborock_now.user_input == 'yes'"
+                      when: "flash_roborock_now.user_input == 'yes' and
+                             'firmware downloaded successfully' in flash_result"
                       block: 
                         - name: "Connect to the roborock wifi"
                           pause:
-                            prompt: "Connect your commputer to the roborock wifi ({{ roborock_wifi_ssid }}) and open this address in your browser: http://{{ roborock_wifi_ip_address }}"
+                            prompt: "Connect your computer to the roborock wifi ({{ roborock_wifi_ssid }}) and open this address in your browser: http://{{ roborock_wifi_ip_address }}"
                             echo: yes
                         - name: "Configure roborock wifi"
                           pause:
