@@ -211,6 +211,7 @@
       shell: 
         cmd: "../devices/xiaomi.vacuum/firmwarebuilder/imagebuilder.sh --firmware=../firmware/{{ version.firmware }}.fullos.pkg --soundfile=../firmware/{{ version.language }}.pkg --public-key=/home/{{ account }}/.ssh/id_rsa_dustcloud.pub --valetudo-path=../valetudo --disable-firmware-updates --ntpserver=fritz.box --rrlogd-patcher=../rrlogd-patcher/patcher.py --replace-adbd –-timezone=Europe/Berlin"
         chdir: "/home/{{ account }}/{{ roborock_directory }}/image"
+        executable: /bin/bash
       become: true
       become_user: 'root'
 
@@ -232,7 +233,9 @@
           block:
 
             - name: "Find wifi device"
-              shell: 'ls /sys/class/ieee80211/*/device/net/'
+              shell: 
+                cmd: 'ls /sys/class/ieee80211/*/device/net/'
+                executable: /bin/bash
               register: wifi_network_device_found
             - name: "Set wifi device, if available"
               set_fact:
@@ -240,7 +243,9 @@
               when: wifi_network_device_found.stdout | length > 0
 
             - name: Scan for roborock wifi ssid
-              shell: 'iwlist {{ wifi_network_device }} scan | grep ESSID | grep "roborock-vacuum" | cut -d "\"" -f 2'
+              shell: 
+                cmd: 'iwlist {{ wifi_network_device }} scan | grep ESSID | grep "roborock-vacuum" | cut -d "\"" -f 2'
+                executable: /bin/bash
               register: roborock_wifi_ssid_found
             - name: "Set roborock wifi ssid, if found"
               set_fact:
@@ -276,7 +281,9 @@
             - name: kill-wpa-supplicant
               include_tasks: tasks/kill_wpa_supplicant.yml
             - name: start-roborock-wpa-supplicant
-              shell: "wpa_supplicant -B -i{{ wifi_network_device }} -Dnl80211,wext -c /etc/wpa_supplicant/wpa_supplicant-{{ wifi_network_device }}.conf"
+              shell: 
+                cmd: "wpa_supplicant -B -i{{ wifi_network_device }} -Dnl80211,wext -c /etc/wpa_supplicant/wpa_supplicant-{{ wifi_network_device }}.conf"
+                executable: /bin/bash
 
             - name: "Test 1 reachability of {{ roborock_wifi_ip_address }}"
               wait_for:
@@ -286,7 +293,9 @@
                 state: started
                 timeout: 300
             - name: "Test 2 reachability of {{ roborock_wifi_ip_address }}"
-              shell: "ping -c 4 {{ roborock_wifi_ip_address }}"
+              shell: 
+                cmd: "ping -c 4 {{ roborock_wifi_ip_address }}"
+                executable: /bin/bash
               register: roborock_wifi_ip_address_ping_test
               when: roborock_wifi_ip_address | ipaddr | length >= 7 and
                     roborock_wifi_ip_address | ipaddr | length <= 15
@@ -302,6 +311,7 @@
                 - name: Get own ip in roborock wifi
                   shell: 
                     cmd: "ip=$(ip addr show | grep '192.168.8.') && echo $ip | cut -d ' ' -f 2 | cut -d '/' -f 1"
+                    executable: /bin/bash
                   register: own_ip_address_in_roborock_wifi
                 - name: Set own ip in roborock wifi
                   set_fact:
@@ -339,22 +349,14 @@
                         mode: '0754'
                     - name: Run flash.sh
                       shell: 
-                        cmd: "flash.sh"
+                        cmd: "( ( nohup ./flash.sh 1>/dev/null 2>&1 ) & )"
                         chdir: "/home/{{ account }}/{{ roborock_directory }}/image/"
+                        executable: /bin/bash
                       async: 3600 # max. script runtime 60*60 = 1 hour
                       poll: 0
 
             - name: "Next manually todos"
               when: roborock_wifi_ip_address_ping_test.rc == 0
-              debug:
-                msg: 
-                  - "Now, the firmware flash process runs for 5-10 minutes while the power LED flashes. After it's done, the start sound will be played."
-                  - "1a: Connect your computer to the roborock wifi ({{ roborock_wifi_ssid }})."
-                  - "1b: Open this address in your browser: http://{{ roborock_wifi_ip_address }}"
-                  - "1c: If you can see the website (http://{{ roborock_wifi_ip_address }}) go on with step 2, otherwise 1d."
-                  - "1d: Connect your computer to the roborock via ssh: ssh root@{{ roborock_wifi_ip_address }}"
-                  - "1e: Start the valetudo app: service valetudo start"
-                  - "1f: Go back to step 1b."
-                  - "2: At the website klick to Settings -> WIFI -> WIFI Settings and change the roborock wifi settings to connect it with your private wifi. After save, the roborock should reboot."
-                  - "3. Connect your computer to your private wifi and open this address in your browser, to see it works: http://rockrobo/"
-                  - "4. It's done. Please configure your roborock settings so that they fit your needs."
+              pause:
+                prompt: "\n- Now, the firmware flash process runs for 5-10 minutes while the power LED flashes. After it's done, the start sound will be played.\n- 1a: Connect your computer to the roborock wifi ({{ roborock_wifi_ssid }}).\n- 1b: Open this address in your browser: http://{{ roborock_wifi_ip_address }}\n- 1c: If you can see the website (http://{{ roborock_wifi_ip_address }}) go on with step 2, otherwise 1d.\n- 1d: Connect your computer to the roborock via ssh: ssh root@{{ roborock_wifi_ip_address }}\n- 1e: Start the valetudo app: service valetudo start\n- 1f: Go back to step 1b.\n- 2: At the website klick to Settings -> WIFI -> WIFI Settings and change the roborock wifi settings to connect it with your private wifi. After save, the roborock should reboot.\n- 3: Connect your computer to your private wifi and open this address in your browser, to see it works: http://rockrobo/\n- 4: It's done. Please configure your roborock settings so that they fit your needs.\nPress enter to continue\n"
+                echo: no
