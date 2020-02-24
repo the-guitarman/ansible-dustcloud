@@ -74,7 +74,7 @@ Install
 -------
 
 ```bash
-ansible-galaxy install ansible-dustcloud
+ansible-galaxy install the_guitarman.ansible_dustcloud
 ```
 
 Example Playbook

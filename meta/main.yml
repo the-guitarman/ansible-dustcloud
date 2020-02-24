@@ -2,7 +2,7 @@ galaxy_info:
   author: The Guitarman
   description: Installs the software to root your roborock vacuum cleaner, to disconnect it from the Xiaomi cloud and to use it with your own private dustcloud.
   company: '-'
-  version: 0.0.1
+  version: 0.1.0
 
   license: license (LGPL-3.0)
 
@@ -11,7 +11,7 @@ galaxy_info:
   platforms:
    - name: Raspbian GNU/Linux
      versions:
-     - 10 (buster)
+       - 10 (buster)
 
   galaxy_tags: 
     - dustcloud
