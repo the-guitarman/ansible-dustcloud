@@ -1,0 +1,48 @@
+#!/bin/bash
+
+LOG=/tmp/flash.log
+
+dt=$(date '+%d.%m.%Y %H:%M:%S');
+echo $dt > $LOG
+
+echo "Find network devices different to lo and {{ wifi_network_device }} ..." >> $LOG
+networkDevices=$(ls /sys/class/net/ | egrep '[^(lo|{{ wifi_network_device }})]' | tr ' ' '\n')
+echo $networkDevices >> $LOG
+echo "... done!" >> $LOG
+
+echo "Check and save current network devices status ..." >> $LOG
+networkDevicesStatus=()
+for netDev in "${networkDevices[@]}"; do
+    currentState=$(cat /sys/class/net/$netDev/operstate)
+    networkDevicesStatus+=$currentState
+
+    if [ "$currentState" = "up" ]; then
+        echo "ifconfig $netDev down" >> $LOG
+        ifconfig $netDev down
+    fi
+done
+echo "... done!" >> $LOG
+
+sleep 5
+
+echo "Flash the firmware to the roborock device ..." >> $LOG
+echo "cd {{ directory_to_flash_roborock_from }}" >> $LOG
+cd {{ directory_to_flash_roborock_from }}
+
+echo "{{ flash_roborock_command }}" >> $LOG
+{{ flash_roborock_command }}
+echo "... done!" >> $LOG
+
+sleep 5
+
+echo "Restore the states of the network devices ..." >> $LOG
+for index in "${!networkDevices[@]}"
+do
+    netDev="${networkDevices[$index]}"
+    formerState="${networkDevicesStatus[$index]}"
+    echo "ifconfig $netDev $formerState" >> $LOG
+    ifconfig $netDev $formerState
+done
+echo "... done!" >> $LOG
+
+sleep 5

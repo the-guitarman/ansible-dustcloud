@@ -30,7 +30,8 @@ account: '<your user name>'
 roborock_directory: 'roborock'
 version:
   valetudo: '0.4.0'
-  firmware: 'v11_001856'
+  firmware: 'v11_001886'
+  language: 'de' # one of: de, english, es, fr, it, ja, ko, ru, taiwanese, transformer
 
 wifi_network_device: wlan0
 wpa_ctrl_interface: 'DIR=/var/run/wpa_supplicant GROUP=netdev'
