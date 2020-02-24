@@ -1,16 +1,24 @@
 ansible-dustcloud
 =================
 
-Version: 0.0.1
+Version: 0.1.0
 
-**Attention:** This is an after work project and n
-either it's finished nor it's ready for production usage.
-It's under development. 
+**Attention:** This is an after work project only. 
 
 Installs the software to root your roborock vacuum cleaner, to disconnect 
 it from the Xiaomi cloud and to use it with your own private dustcloud. 
 The dustcloud supports some roborock devices only. For more information 
 please see: [github.com/dgiese/dustcloud](https://github.com/dgiese/dustcloud)
+
+Workflow:
+1. Downloads and installs the required packages and software to the remote host
+2. Creates the new firmware for your roborock vacuum cleaner
+3. Connects the remote host to the reseted roborock wifi
+4. Starts the flash script
+  - Disables the remote host LAN devices of the remote host, except lo and wlan-device
+  - Flashes the new firmware to the roborock vacuum cleaner asynchronous
+  - Enables the remote host LAN devices of the remote host, except lo and wlan-device
+5. Prints next todos you have to do manually
 
 This role is heavily inspired by this german blog post [german blog post](https://maker-tutorials.com/xiaomi-roborock-saugroboter-raspberry-pi-hack-root/).
 
@@ -88,6 +96,7 @@ Usage (e.g.: playbook_dustcloud_install.yml):
              version:
                valetudo: '0.4.0'
                firmware: 'v11_001856'
+               language: 'de'
 ```
 
 - your_account_name: This is the user name at your remote host.
