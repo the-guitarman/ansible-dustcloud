@@ -86,7 +86,7 @@ Usage (e.g.: playbook_dustcloud_install.yml):
     ---
     - hosts: raspberry
       roles:
-         - role: dustcloud
+         - role: the_guitarman.ansible_dustcloud
            become: true
            become_method: sudo
            become_user: "root"
